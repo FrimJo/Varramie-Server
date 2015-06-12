@@ -1,111 +1,227 @@
-
-
 import java.net.InetAddress;
-import java.util.ArrayList;
+import java.nio.ByteBuffer;
 import java.util.LinkedList;
 import java.util.Queue;
 
-public class ToClient{
-	
-	private static int				idCounter = 0;
 
-	private final int				id;
-	private final InetAddress		ip;
-	private final int				port;
-	private final Queue<PDU> 		packageList = new LinkedList<PDU>();
-	private final Worker			worker = new Worker();
-	private final ClientReceiver	sender;
+public class ToClient{
+
 	
-	private boolean 				stop = false; 
+	private final InetAddress		_address;
+	private final int				_port;
+	private final int				_id;
+	private boolean					_alive = true;
 	
-	
-	
-	public ToClient(final InetAddress ip, final int port, final ClientReceiver sender){
-		this.id = idCounter++; 
-		this.ip = ip;
-		this.port = port;
-		this.worker.start();
-		this.sender = sender;
-		Manager.putClientToList(this);
-		
+	public ToClient(final InetAddress address, final int port, final int id){
+		_address = address;
+		_port = port;
+		_id = id;
 	}
 	
-	private synchronized void receivePackage(final PDU pdu){
-		this.packageList.add(pdu);
+	
+	public InetAddress getAddress(){
+		return _address;
+	}
+	
+	public int getPort(){
+		return _port;
 	}
 	
 	public int getId(){
-		return this.id;
+		return _id;
 	}
-	
 	
 	public void quit(){
-		this.stop = true;
+		//TODO Implement this method
 	}
-	/**
-	 * The workers job is to get packages from the packageList, and
-	 * send it.
-	 * */
-	private class Worker extends Thread{
-		
-		@Override
-		public void run(){
-			while(!stop){
-				PDU pdu = packageList.poll();
-				if(pdu != null)
-					sender.sendPDU(pdu, ip, port);
-			}
-		}
-		
+	
+	public void setAlive(boolean val){
+		_alive = val;
+	}
+	
+	public boolean isAlive(){
+		return _alive;
 	}
 	
 	/**
-	 * The manager keeps tracks of all the clients and can
-	 * give Clients packages.
+	 * The manager keeps tracks of all the clients.
 	 * */
 	public static class Manager{
 
-		private static final ArrayList<ToClient>	connectedClients = new ArrayList<ToClient>();
+		private static final int MAX_CLIENTS = 255;
 		
-		private static void putClientToList(final ToClient client){
+		private static final ToClient[] connectedClients = new ToClient[MAX_CLIENTS];
+		private static int connectedClientsSize = 0;
+		private static int _pointer = 0;
+		
+		//private static final HashMap<Key, ToClient>	connectedClients = new HashMap<Key,ToClient>();
+		private static final Queue<ByteBuffer> packageQueue = new LinkedList<ByteBuffer>();
+		private static boolean isUpdated = false;
+		private static boolean end = false;
+		private static final CleanerThread cleanerThread = new CleanerThread();
+
+		public static ToClient createClient(final InetAddress client_address, final int client_port){
+			ToClient client = new ToClient(client_address, client_port, _pointer);
+			boolean success = addClient(client);
+			return success ? client : null;
+		}
+		
+		public static boolean addClient(ToClient client){
+			int index = _pointer;
 			synchronized (connectedClients) {
-				connectedClients.add(client);
+				
+				do{
+					try  {
+						if(connectedClients[_pointer] == null){
+							connectedClients[_pointer] = client;
+							connectedClientsSize++;
+							_pointer++;
+							isUpdated = true;
+							return true;
+						}
+						_pointer++;
+
+					}catch(IndexOutOfBoundsException e){
+						_pointer %= MAX_CLIENTS;
+					}
+				}while(_pointer != index);
+			}
+			return false;
+		}
+		
+		public static ToClient hasClient(final int id){
+			synchronized (connectedClients) {
+				return connectedClients[id];
 			}
 		}
 		
-		public static void removeClientFromList(final int client_id){
-			ToClient[] array;
+		public static ToClient hasClient(final InetAddress address, final int port){
+			ToClient c;
 			synchronized (connectedClients) {
-				array = (ToClient[]) connectedClients.toArray();
+				for(int i = 0; i < MAX_CLIENTS; i++){
+					c = connectedClients[i];
+					if(c != null && c.getPort() == port && c.getAddress().equals(address))
+						return c;	
+				}
 			}
-			for(int i = 0; i < array.length; i++){
-				if(array[i].getId() == client_id){
-					connectedClients.remove(i);
-					array[i].quit();
-					break;
+			return null;
+		}
+		
+		public static ToClient getClient(final byte id){
+			synchronized (connectedClients) {
+				return connectedClients[id];	
+			}
+		}
+		
+		public static ToClient[] getAllClientsAsArray(){
+			isUpdated = false;
+			
+			ToClient[] clients = new ToClient[connectedClientsSize];
+			
+			int index = 0;
+			for(int i = 0; i < MAX_CLIENTS; i++){
+				synchronized (connectedClients) {
+					if(connectedClients[i] != null){
+						clients[index] = connectedClients[i];
+						index++;
+					}
+				}
+				
+			}
+			 
+			return clients;
+		}
+		
+		public static boolean removeClientFromList(final int id){
+			isUpdated = true;
+			ToClient client = null;
+			synchronized (connectedClients) {
+				client = connectedClients[id];
+			}
+			if(client != null){
+				connectedClients[id] = null;
+				connectedClientsSize--;
+				Server.INSTANCE.println("Removed client with id: " + id + " from the list with connected clients.");
+				client.quit();
+				return true;
+			}
+			return false;
+		}
+
+		public static void removeAllClientsFromList(){
+			isUpdated = true;
+			ToClient c = null;
+			
+			for(int i = 0; i < MAX_CLIENTS; i++){
+				synchronized (connectedClients) {
+					c = connectedClients[i];
+					if(c != null){
+						connectedClients[i] = null;
+						c.quit();
+					}
 				}
 			}
 		}
 		
-		public static void removeAllClientsFromList(){
-			synchronized (connectedClients) {
-				connectedClients.clear();
+		public static void addPackage(ByteBuffer bb){
+			Server.INSTANCE.println("Added package to queue.");
+			synchronized (packageQueue) {
+				packageQueue.add(bb);	
 			}
 		}
 		
-		public static void giveClientPackage(final int client_id, final PDU pdu){
-			ToClient[] array;
-			synchronized (connectedClients) {
-				array = (ToClient[]) connectedClients.toArray();
+		public static ByteBuffer pollPackage(){
+			synchronized (packageQueue) {
+				return packageQueue.poll();	
 			}
-			int i;
-			for(i = 0; i < array.length; i++){
-				if(array[i].getId() == client_id)
-					break;
-				array[i].receivePackage(pdu);
+		}
+		
+		public static int packageQueueSize(){
+			synchronized (packageQueue) {
+				return packageQueue.size();
 			}
-			for(i++; i < array.length; i++){
-				array[i].receivePackage(pdu);
+		}
+		
+		public synchronized static boolean isUpdated(){
+			return isUpdated;
+		}
+		
+		public static void destroy(){
+			end = true;
+			cleanerThread.interrupt();
+		}
+		
+		public static void startCleaner(){
+			cleanerThread.start();
+		}
+		
+		private static class CleanerThread extends Thread{
+			
+			public CleanerThread(){
+				super("Cleaner Thread");
+			}
+			
+			@Override
+			public void run(){
+				while(!end){
+					try {
+						sleep(30000);
+					} catch (InterruptedException e) {
+						break;
+					}
+					synchronized (connectedClients) {
+
+						for(int i = 0; i < MAX_CLIENTS; i++){
+							ToClient c = connectedClients[i];
+							if(c != null){
+								if(c.isAlive())
+									c.setAlive(false);
+								else
+									removeClientFromList(c.getId());
+							}
+						}
+					}
+				}
 			}
 		}
 	}

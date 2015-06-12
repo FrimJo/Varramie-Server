@@ -1,7 +1,6 @@
-import java.awt.font.NumericShaper;
 import java.sql.Time;
-import java.util.ArrayList;
 import java.util.Scanner;
+
 public class ConsoleUI extends Thread implements IGUI{
 	
 	private final Scanner	systemIn = new Scanner(System.in);
@@ -31,7 +30,7 @@ public class ConsoleUI extends Thread implements IGUI{
 	@Override
 	public void println(String str) {
 		this.time.setTime(System.currentTimeMillis());
-		System.out.println("(" + this.time.toString()+") " + str);
+		System.out.println("(" + this.time.toString()+") " + str + "["+ToClient.Manager.packageQueueSize()+"]");
 	}
 	
 	/**
@@ -52,15 +51,16 @@ public class ConsoleUI extends Thread implements IGUI{
 		while(!exit){
 			input = getInput().split(" ");
 			if( input[0].equals("quit") ){
-				println("System shutting down . . .");
+				Server.INSTANCE.shutDown();
 				break;
 				
 			}else if( input[0].equals("list") ){
-				ArrayList<ToClient> connectedClients = Server.INSTANCE.getconnectedClients();
-				println("Connected clients ("+connectedClients.size()+"):");
-				for(int i = 0; i < connectedClients.size(); i++){
-					println("["+i+"] " + connectedClients.get(i));
-				}
+//				ArrayList<ToClient> connectedClients = Server.INSTANCE.getConnectedClients();
+//				println("Connected clients ("+connectedClients.size()+"):");
+//				for(int i = 0; i < connectedClients.size(); i++){
+//					println("["+i+"] " + connectedClients.get(i));
+//				}
+				println("Not yet implemented.");
 			}else{
 				println("Command '"+ input[0] +"' not recognized.");
 			}
