@@ -1,3 +1,4 @@
+package com.varramie.spots.server;
 
 import java.io.DataOutputStream;
 import java.io.IOException;

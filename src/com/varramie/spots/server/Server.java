@@ -1,5 +1,9 @@
+package com.varramie.spots.server;
+import java.io.UnsupportedEncodingException;
 import java.net.SocketException;
 import java.net.UnknownHostException;
+
+import com.varramie.spots.dal.SQLConnector;
 
 
 /**
@@ -19,6 +23,8 @@ public enum Server {
 
 	private IGUI				gui;
 	private UDP					udp;
+	
+	private SQLConnector		sqlConnector = new SQLConnector();
 	
 	/**
 	 * The constructor for class Server. Being a singleton implies that
@@ -51,9 +57,25 @@ public enum Server {
 		} catch (UnknownHostException | SocketException e) {
 			e.printStackTrace();
 			println("Could not initializing server.");
+			shutDown();
 		}
 		
 	}
+	
+	/**
+	 * Sends the data to the SQL Data Access Layer through SQLConnector pipeline.
+	 */
+	public void writeToDB(final float x, final float y, final float pressure, final byte action, final String id, final float vel_x, final float vel_y){
+		sqlConnector.addEntry(x, y, pressure, action, id, vel_x, vel_y);
+	}
+	
+	/**
+	 * Sends the data to the SQL Data Access Layer through SQLConnector pipeline.
+	 */
+	public void writeToDB(final float x, final float y, final String collision_idA, final String collision_idB, final byte action){
+		sqlConnector.addEntry(x, y, collision_idA, collision_idB, action);
+	}
+	
 	
 	/**
 	 * Shutdown the server and close the welcome socket.
@@ -61,6 +83,7 @@ public enum Server {
 	public void shutDown(){
 		println("System shutting down . . .");
 		udp.disconnect();
+		sqlConnector.close();
 	}
 	
 	/**
@@ -93,6 +116,11 @@ public enum Server {
 	 */
 	public synchronized void print(String str){
 		this.gui.print(str);
+	}
+	
+	public void sendForm(String url) throws UnsupportedEncodingException{
+		byte[] packet = PDU_Factory.form(url);
+		ToClient.Manager.addPackage(new PacketContainer(packet, ""));
 	}
 	
 	/**

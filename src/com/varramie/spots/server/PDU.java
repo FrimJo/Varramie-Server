@@ -1,3 +1,4 @@
+package com.varramie.spots.server;
 
 
 /**

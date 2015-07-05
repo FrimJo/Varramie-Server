@@ -1,3 +1,5 @@
+package com.varramie.spots.server;
+import java.io.UnsupportedEncodingException;
 import java.sql.Time;
 import java.util.Scanner;
 
@@ -55,12 +57,22 @@ public class ConsoleUI extends Thread implements IGUI{
 				break;
 				
 			}else if( input[0].equals("list") ){
-//				ArrayList<ToClient> connectedClients = Server.INSTANCE.getConnectedClients();
-//				println("Connected clients ("+connectedClients.size()+"):");
-//				for(int i = 0; i < connectedClients.size(); i++){
-//					println("["+i+"] " + connectedClients.get(i));
-//				}
-				println("Not yet implemented.");
+				Object[] connectedClients = ToClient.Manager.getAllClientsAsArray();
+				println("Connected clients ("+connectedClients.length+"):");
+				for(int i = 0; i < connectedClients.length; i++){
+					ToClient c = (ToClient) connectedClients[i];
+					println("["+i+"] IP: " + c.getAddress().getHostAddress() + ":" + c.getPort());
+				}
+			}else if( input[0].equals("form") ){
+				
+				try {
+					if(input.length != 2)
+						throw new UnsupportedEncodingException();
+					Server.INSTANCE.sendForm(input[1]);
+				} catch (UnsupportedEncodingException e) {
+					println("Comand 'form' not used correctly, example: 'form http://www.example.com'");
+				}
+				
 			}else{
 				println("Command '"+ input[0] +"' not recognized.");
 			}
