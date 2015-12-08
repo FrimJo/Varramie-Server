@@ -120,8 +120,8 @@ public class ToClient{
 			connectedClients.clear();
 		}
 		
-		public static void addPackage(PacketContainer packet){
-			packageQueue.add(packet);	
+		public static void addPackage(PacketContainer packet) throws InterruptedException{
+			packageQueue.put(packet);	
 		}
 		
 		public static PacketContainer takePackage() throws InterruptedException{

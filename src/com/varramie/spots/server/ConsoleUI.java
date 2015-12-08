@@ -71,7 +71,7 @@ public class ConsoleUI extends Thread implements IGUI{
 					Server.INSTANCE.sendForm(input[1]);
 				} catch (UnsupportedEncodingException e) {
 					println("Comand 'form' not used correctly, example: 'form http://www.example.com'");
-				}
+				} catch (InterruptedException e) {}
 				
 			}else{
 				println("Command '"+ input[0] +"' not recognized.");

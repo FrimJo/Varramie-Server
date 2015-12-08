@@ -118,7 +118,7 @@ public enum Server {
 		this.gui.print(str);
 	}
 	
-	public void sendForm(String url) throws UnsupportedEncodingException{
+	public void sendForm(String url) throws UnsupportedEncodingException, InterruptedException{
 		byte[] packet = PDU_Factory.form(url);
 		ToClient.Manager.addPackage(new PacketContainer(packet, ""));
 	}

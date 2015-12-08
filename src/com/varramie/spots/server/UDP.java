@@ -106,6 +106,9 @@ public class UDP extends Thread{
 						
 						
 						socket.send(new DatagramPacket(byteArray, byteArray.length, client_address, client_port));
+						
+						//ToClient.Manager.addPackage(new PacketContainer(byteArray, ""));
+						
 						Server.INSTANCE.println("Sent a returning JOIN message to client with id: " + client.getId());
 
 						break;
@@ -142,6 +145,10 @@ public class UDP extends Thread{
 						Server.INSTANCE.println("Sent a returning ALIVE message to client with id: " + client.getId());
 						break;
 						
+					/*
+					 * The QUIT package is retrieved when a user chooses to drop from the server.
+					 * 	The server then remove the user from the list of connected users. 
+					 */
 					case OpCodes.QUIT:
 						Server.INSTANCE.println("Received packet QUIT.");
 						int quit_id_length = bytes[2] & 0xff;
@@ -162,6 +169,13 @@ public class UDP extends Thread{
 						ToClient.Manager.removeClientFromList(quit_id);
 						Server.INSTANCE.println("Client with id: "+quit_id+" disconnected");
 						break;
+						
+					/*
+					 * The COLLISION package is retrieved from users which collides in to
+					 * each other.
+					 * 	The server then stores the users which collided and the coordinates
+					 * where it happened in a SQL Database.
+					 */	
 					case OpCodes.COLLISION:
 						Server.INSTANCE.println("Received packet COLISSION.");
 						int collission_idA_length = bytes[2] & 0xff;
@@ -190,10 +204,50 @@ public class UDP extends Thread{
 						
 						String collision_idA = new String(collission_idA_array, "UTF-8");
 						String collision_idB = new String(collission_idB_array, "UTF-8");
+						
 						Server.INSTANCE.writeToDB(pos_x, pos_y, collision_idA, collision_idB, action);
-						Server.INSTANCE.println("Clients with id: "+collision_idA+" and " + collision_idB + " collided at: ");
+						Server.INSTANCE.println("Clients with id: "+collision_idA+" and " + collision_idB + " collided at: (" + pos_x + "," + pos_y + ")");
 						break;
-					default:
+						
+					/*
+					 * The POKE code is invoked when a user uses the poke option on his device,
+					 * a POKE package is sent to the server which it retrieves here.
+					 * 	From here the server passes the POKE package forward to all connected
+					 * users except the user who initiated the poke.   
+					 */
+					case OpCodes.POKE:
+						Server.INSTANCE.println("Received packet POKE.");
+						
+						int poke_id_length = bytes[2] & 0xff;		// Retrieves the length of the id by converting it from 'byte' to 'int'
+						int totalLength_poke = 3 + poke_id_length;
+						
+						bb = ByteBuffer.allocateDirect(totalLength_poke);
+						bb.put(bytes, 0, totalLength_poke);
+						byteArray = new byte[totalLength_poke];
+						bb.position(0);
+						bb.get(byteArray);
+						
+						if(!Checksum.isCorrect(byteArray))
+							throw new ChecksumException("The checksum of the package is not correct.");
+						
+						byte[] poke_id_array = new byte[poke_id_length];
+						bb.position(3);
+						bb.get(poke_id_array);
+						String poke_id = new String(poke_id_array, "UTF-8");
+						
+						ToClient.Manager.addPackage(new PacketContainer(byteArray, poke_id));
+						break;
+						
+					/*
+					 * This switch case is invoked when the server retrieves either one of the
+					 * ACTION codes from a user, which contains information on where the user
+					 * touched the screen, the pressure and the velocity.
+					 * 	The server saves this information in a SQL database and also forwards
+					 * it to all the connected users except the user who sent the action.    
+					 */
+					case OpCodes.ACTION_DOWN:
+					case OpCodes.ACTION_MOVE:
+					case OpCodes.ACTION_UP:
 						
 						int default_id_length = bytes[2] & 0xff;
 						bb = ByteBuffer.allocateDirect(23 + default_id_length);
@@ -218,14 +272,16 @@ public class UDP extends Thread{
 						client = ToClient.Manager.getClient(default_id, client_address, client_port);
 						//ToClient.Manager.addPackage(ByteBuffer.wrap(byteArray));
 						ToClient.Manager.addPackage(new PacketContainer(byteArray, default_id));
-						bb.position(3 + default_id_length);
-						float x = bb.getFloat();
-						float y = bb.getFloat();
-						float pressure = bb.getFloat();
-						float vel_x = bb.getFloat();
-						float vel_y = bb.getFloat();
 						
-						Server.INSTANCE.writeToDB(x, y, pressure, action, default_id, vel_x, vel_y);
+						if(action != OpCodes.ACTION_UP){
+							bb.position(3 + default_id_length);
+							float x = bb.getFloat();
+							float y = bb.getFloat();
+							float pressure = bb.getFloat();
+							float vel_x = bb.getFloat();
+							float vel_y = bb.getFloat();
+							Server.INSTANCE.writeToDB(x, y, pressure, action, default_id, vel_x, vel_y);
+						}
 						break;
 					}
 					
@@ -237,6 +293,8 @@ public class UDP extends Thread{
 				} catch (ChecksumException e) {
 					e.printStackTrace();
 					Server.INSTANCE.println("ChecksumException: " + e.getMessage());
+				} catch (InterruptedException e) {
+					
 				}
 			}	
 
@@ -258,7 +316,7 @@ public class UDP extends Thread{
 					clients = ToClient.Manager.getAllClientsAsArray();
 					packet = ToClient.Manager.takePackage();
 					int i = 0;
-				
+					
 					ToClient c;
 					for(; i < clients.length; i++){
 						c = (ToClient) clients[i];
